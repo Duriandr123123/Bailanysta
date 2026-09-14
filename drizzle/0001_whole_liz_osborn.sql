@@ -1,0 +1,1 @@
+ALTER TABLE `posts` ADD `search_text` text DEFAULT '' NOT NULL;
