@@ -201,6 +201,52 @@ const ownPost = await call(
 );
 assert.equal((await fetch(base + media.url)).status, 200);
 checks++;
+// Follows must be idempotent, scoped to the session, and independent of school access.
+const followPath = "profiles/" + people[1].public_id + "/follow";
+await call(null, followPath, "POST", {}, 401);
+await call(null, "posts?following=1", "GET", undefined, 401);
+await call(outsider, "profiles/missing/follow", "POST", {}, 404);
+await call(teacher, followPath, "POST", {}, 400);
+assert.equal((await call(outsider, "posts?following=1")).length, 0);
+checks++;
+await call(outsider, followPath, "POST", { follower_id: student });
+await call(outsider, followPath, "POST", {});
+const followedProfile = await call(outsider, "profiles/" + people[1].public_id);
+assert.equal(followedProfile.followers, 1);
+assert.equal(followedProfile.isFollowing, 1);
+assert.equal(
+  (await call(null, "profiles/" + people[4].public_id)).following,
+  1,
+);
+assert.equal(
+  (await call(student, "profiles/" + people[1].public_id)).isFollowing,
+  0,
+);
+const followingFeed = await call(outsider, "posts?following=1&q=" + suffix);
+assert.deepEqual(
+  followingFeed.map((p) => p.id),
+  [post.id],
+);
+assert.equal(
+  (await call(outsider, "posts?following=1&q=nomatch" + suffix)).length,
+  0,
+);
+assert.equal(
+  (await call(teacher, "notifications")).filter((n) =>
+    n.body.includes("подписался"),
+  ).length,
+  1,
+);
+checks += 7;
+await call(outsider, "channels/" + cls.id + "/messages", "GET", undefined, 403);
+await call(outsider, followPath, "DELETE", {});
+await call(outsider, followPath, "DELETE", {});
+assert.equal((await call(outsider, "posts?following=1")).length, 0);
+assert.equal(
+  (await call(null, "profiles/" + people[1].public_id)).followers,
+  0,
+);
+checks += 2;
 const bad = await fetch(base + "/api/upload", {
   method: "POST",
   headers: {
@@ -237,5 +283,5 @@ await call(teacher, "posts/" + post.id, "DELETE", {});
 assert.equal((await call(null, "posts?q=" + suffix)).length, 0);
 checks++;
 console.log(
-  `PASS: ${checks} API checks; 5 identities; ownership, roles, private chats, persistence reads, likes, comments, files, validation, CSRF, revocation.`,
+  `PASS: ${checks} API checks; 5 identities; ownership, roles, private chats, persistence reads, likes, comments, follows, following feed, notifications, files, validation, CSRF, revocation.`,
 );

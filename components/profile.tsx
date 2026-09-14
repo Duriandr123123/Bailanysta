@@ -13,23 +13,40 @@ import { Composer, PostFeed, Loading, SignIn } from "./posts";
 import { Avatar } from "./app-shell";
 import type { Person } from "@/lib/types";
 import { toast } from "sonner";
+type ProfileInfo = Person & {
+  followers: number;
+  following: number;
+  isFollowing: number;
+};
 export function Profile({ publicId }: { publicId?: string }) {
   const { user, schools, loading, refresh } = useApp();
-  const [person, setPerson] = useState<Person | null>(null);
+  const [person, setPerson] = useState<ProfileInfo | null>(null);
   const [error, setError] = useState("");
   const [edit, setEdit] = useState(false);
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
   const mine = !publicId || publicId === user?.public_id;
   useEffect(() => {
-    if (mine) {
-      setPerson(user);
+    if (loading) return;
+    const id = publicId || user?.public_id;
+    if (!id) {
+      setPerson(null);
       return;
     }
-    void request<Person>("profiles/" + publicId)
-      .then(setPerson)
-      .catch((e) => setError(e.message));
-  }, [mine, user, publicId]);
+    let active = true;
+    setError("");
+    setPerson(null);
+    void request<ProfileInfo>("profiles/" + id)
+      .then((p) => {
+        if (active) setPerson(p);
+      })
+      .catch((e) => {
+        if (active) setError(e.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [loading, user, publicId]);
   if (loading) return <Loading />;
   if (mine && !user)
     return (
@@ -64,6 +81,49 @@ export function Profile({ publicId }: { publicId?: string }) {
                 Редактировать
               </button>
             )}
+            {!mine &&
+              (user ? (
+                <button
+                  className="secondary profile-edit"
+                  disabled={busy}
+                  aria-pressed={!!person.isFollowing}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      await mutate(
+                        "profiles/" + person.public_id + "/follow",
+                        {},
+                        person.isFollowing ? "DELETE" : "POST",
+                      );
+                      setPerson(
+                        await request<ProfileInfo>(
+                          "profiles/" + person.public_id,
+                        ),
+                      );
+                    } catch (e) {
+                      toast.error((e as Error).message);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  {busy
+                    ? "Сохраняем…"
+                    : person.isFollowing
+                      ? "Отписаться"
+                      : "Подписаться"}
+                </button>
+              ) : (
+                <Link
+                  className="secondary profile-edit"
+                  href={
+                    "/signin-with-chatgpt?return_to=" +
+                    encodeURIComponent("/profiles/" + person.public_id)
+                  }
+                >
+                  Войти и подписаться
+                </Link>
+              ))}
             <h1>{person.name}</h1>
             <button
               className="public-id"
@@ -80,6 +140,14 @@ export function Profile({ publicId }: { publicId?: string }) {
               <Copy size={15} />
             </button>
             <p>{person.bio || "Пока ничего не рассказал о себе."}</p>
+            <div className="profile-stats" aria-live="polite">
+              <span>
+                Подписчики: <strong>{person.followers}</strong>
+              </span>
+              <span>
+                Подписки: <strong>{person.following}</strong>
+              </span>
+            </div>
           </div>
         </section>
         {mine && <Composer onSaved={() => setRevision((v) => v + 1)} />}

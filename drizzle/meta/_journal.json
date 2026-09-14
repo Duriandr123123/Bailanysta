@@ -15,6 +15,13 @@
       "when": 1789419564412,
       "tag": "0001_whole_liz_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789427222677,
+      "tag": "0002_minor_triton",
+      "breakpoints": true
     }
   ]
 }

@@ -1918,3 +1918,21 @@ a.primary,
     font-size: 14px;
   }
 }
+
+.profile-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-top: 16px;
+  font-size: 14px;
+}
+@media (max-width: 600px) {
+  .feed-heading {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .feed-heading [role="tab"] {
+    padding-inline: 8px;
+    font-size: 12px;
+  }
+}

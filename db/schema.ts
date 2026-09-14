@@ -140,3 +140,20 @@ export const uploads = sqliteTable("uploads", {
     .references(() => users.id),
   mime: text().notNull(),
 });
+
+export const follows = sqliteTable(
+  "follows",
+  {
+    followerId: text("follower_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    followedId: text("followed_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.followerId, t.followedId] }),
+    index("idx_follows_followed").on(t.followedId),
+  ],
+);

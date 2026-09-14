@@ -54,6 +54,12 @@ export async function api(req: Request, parts: string[]): Promise<Response> {
       if (path === "posts") {
         const values: unknown[] = [user?.id || ""];
         let where = " WHERE 1=1";
+        if (url.searchParams.get("following") === "1") {
+          if (!user) fail(401, "Войдите, чтобы увидеть ленту подписок");
+          where +=
+            " AND EXISTS(SELECT 1 FROM follows f WHERE f.follower_id=? AND f.followed_id=p.user_id)";
+          values.push(user!.id);
+        }
         for (const [param, column] of [
           ["school", "p.school_id"],
           ["user", "u.public_id"],
@@ -106,7 +112,12 @@ export async function api(req: Request, parts: string[]): Promise<Response> {
       }
       if (parts[0] === "profiles" && parts.length === 2) {
         const p = await one(
-          "SELECT id,public_id,name,bio,created_at FROM users WHERE public_id=?",
+          `SELECT u.id,u.public_id,u.name,u.bio,u.created_at,
+          (SELECT count(*) FROM follows WHERE followed_id=u.id) AS followers,
+          (SELECT count(*) FROM follows WHERE follower_id=u.id) AS following,
+          (SELECT count(*) FROM follows WHERE follower_id=? AND followed_id=u.id) AS isFollowing
+          FROM users u WHERE public_id=?`,
+          user?.id || "",
           parts[1],
         );
         if (!p) fail(404, "Профиль не найден");
@@ -201,6 +212,49 @@ export async function api(req: Request, parts: string[]): Promise<Response> {
         throw new Error();
     } catch {
       return fail(400, "Некорректный JSON");
+    }
+    if (
+      parts[0] === "profiles" &&
+      parts.length === 3 &&
+      parts[2] === "follow" &&
+      (method === "POST" || method === "DELETE")
+    ) {
+      const target = await one<Person>(
+        "SELECT * FROM users WHERE public_id=?",
+        parts[1],
+      );
+      if (!target) fail(404, "Профиль не найден");
+      if (target!.id === actor.id) fail(400, "Нельзя подписаться на себя");
+      if (method === "DELETE") {
+        await run(
+          "DELETE FROM follows WHERE follower_id=? AND followed_id=?",
+          actor.id,
+          target!.id,
+        );
+      } else {
+        // A transaction makes the follow and its notification atomic; duplicates add neither.
+        await db().batch([
+          db()
+            .prepare(
+              "INSERT INTO notifications (id,user_id,body,href,created_at) SELECT ?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM follows WHERE follower_id=? AND followed_id=?)",
+            )
+            .bind(
+              uid(),
+              target!.id,
+              `${actor.name} подписался на вас`,
+              "/profiles/" + actor.public_id,
+              now(),
+              actor.id,
+              target!.id,
+            ),
+          db()
+            .prepare(
+              "INSERT OR IGNORE INTO follows (follower_id,followed_id,created_at) VALUES (?,?,?)",
+            )
+            .bind(actor.id, target!.id, now()),
+        ]);
+      }
+      return json({ ok: true });
     }
     if (path === "profile" && method === "PATCH") {
       await run(

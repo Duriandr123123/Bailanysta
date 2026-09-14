@@ -11,19 +11,25 @@ import {
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useApp } from "@/components/providers";
-import { Composer, PostFeed } from "@/components/posts";
+import { Composer, PostFeed, SignIn, Loading } from "@/components/posts";
 export default function Home() {
-  const { schools } = useApp();
+  const { schools, user, loading } = useApp();
   const params = useSearchParams();
   const router = useRouter();
   const [search, setSearch] = useState(params.get("q") || "");
-  const [tab, setTab] = useState("all");
+  const [tab, setTab] = useState(
+    params.get("feed") === "following" ? "following" : "all",
+  );
   const [revision, setRevision] = useState(0);
   useEffect(() => setSearch(params.get("q") || ""), [params]);
   const query =
     "q=" +
     encodeURIComponent(params.get("q") || "") +
-    (tab === "achievements" ? "&kind=achievement" : "");
+    (tab === "achievements"
+      ? "&kind=achievement"
+      : tab === "following"
+        ? "&following=1"
+        : "");
   useEffect(() => {
     const context = (document as any).modelContext;
     if (!context?.registerTool) return;
@@ -70,7 +76,11 @@ export default function Home() {
           className="search"
           onSubmit={(e) => {
             e.preventDefault();
-            window.location.assign("/?q=" + encodeURIComponent(search));
+            window.location.assign(
+              "/?q=" +
+                encodeURIComponent(search) +
+                (tab === "following" ? "&feed=following" : ""),
+            );
           }}
         >
           <Search size={20} />
@@ -88,12 +98,27 @@ export default function Home() {
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList variant="line">
               <TabsTrigger value="all">Все публикации</TabsTrigger>
+              <TabsTrigger value="following">Подписки</TabsTrigger>
               <TabsTrigger value="achievements">Достижения</TabsTrigger>
             </TabsList>
           </Tabs>
           <span>Сначала новые</span>
         </div>
-        <PostFeed query={query} revision={revision} />
+        {tab === "following" && loading ? (
+          <Loading />
+        ) : tab === "following" && !user ? (
+          <SignIn text="Войдите и подпишитесь на авторов, чтобы видеть их публикации здесь." />
+        ) : (
+          <>
+            <PostFeed query={query} revision={revision} />
+            {tab === "following" && (
+              <p className="rail-note">
+                Здесь публикации авторов, на которых вы подписаны. Подписаться
+                можно в профиле автора.
+              </p>
+            )}
+          </>
+        )}
       </div>
       <aside className="right-column">
         <div className="welcome-card">
